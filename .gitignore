@@ -56,3 +56,4 @@ env/
 # Testing / coverage
 # ------------------------------
 coverage/dataset/ 
+CulinaryDB/ 
