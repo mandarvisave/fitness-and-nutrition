@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "validate:foods": "node scripts/foods-quality-check.mjs",
+    "test:foods": "node scripts/foods-quality-check.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.0",
@@ -28,6 +30,7 @@
     "resend": "^4.1.2",
     "styled-jsx": "^5.1.7",
     "tailwind-merge": "^2.5.5",
+    "uuid": "^13.0.0",
     "zod": "^3.24.1",
     "zustand": "^5.0.2"
   },
@@ -35,6 +38,7 @@
     "@types/node": "^22.10.2",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
+    "@types/uuid": "^10.0.0",
     "autoprefixer": "^10.4.20",
     "postcss": "^8.4.49",
     "tailwindcss": "^3.4.17",

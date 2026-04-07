@@ -5,6 +5,7 @@ const items = [
   { href: "/dashboard", label: "Dashboard", icon: Home },
   { href: "/nutrition", label: "Nutrition", icon: Salad },
   { href: "/workouts", label: "Workouts", icon: Dumbbell },
+  { href: "/workouts/diary", label: "Exercise Diary", icon: Dumbbell },
   { href: "/health-score", label: "Health Score", icon: Trophy },
   { href: "/community", label: "Community", icon: Users },
   { href: "/settings", label: "Settings", icon: Settings }

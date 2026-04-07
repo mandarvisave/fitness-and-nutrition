@@ -15,6 +15,8 @@ export type FoodSearchResult = {
   fat_g: number | null;
   serving_label: string | null;
   serving_grams: number | null;
+  source?: "verified" | "inferred";
+  confidence?: "high" | "medium" | "low";
 };
 
 export type FoodLogModalMode = "add" | "edit";

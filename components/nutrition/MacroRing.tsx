@@ -1,11 +1,15 @@
 "use client";
 
 import { useMemo } from "react";
-import { round1, sumMacros, useFoodLogStore } from "@/lib/store/useFoodLogStore";
+import { getEntriesWithKnownNutrition, round1, sumMacros, todayKey, useFoodLogStore } from "@/lib/store/useFoodLogStore";
 
 export function MacroRing() {
   const entries = useFoodLogStore((s) => s.entries);
-  const totals = useMemo(() => sumMacros(entries), [entries]);
+  const totals = useMemo(() => {
+    const today = todayKey();
+    const todaysEntries = entries.filter((entry) => entry.date ? entry.date === today : entry.createdAt.slice(0, 10) === today);
+    return sumMacros(getEntriesWithKnownNutrition(todaysEntries));
+  }, [entries]);
   const grams = totals.protein_g + totals.carbs_g + totals.fat_g;
   const proteinPct = grams > 0 ? Math.round((totals.protein_g / grams) * 100) : 0;
   const carbsPct = grams > 0 ? Math.round((totals.carbs_g / grams) * 100) : 0;

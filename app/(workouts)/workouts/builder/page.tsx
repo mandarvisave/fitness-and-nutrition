@@ -126,16 +126,36 @@ export default function WorkoutBuilderPage() {
               <CardHeader>
                 <CardTitle>Your Inputs</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <Input value={goal} onChange={(event) => setGoal(event.target.value)} placeholder="Goal (e.g., weight loss, muscle gain)" />
-                <select value={fitnessLevel} onChange={(event) => setFitnessLevel(event.target.value as "beginner" | "intermediate" | "advanced")} className="h-11 w-full rounded-md border bg-white px-4 text-sm">
-                  <option value="beginner">Beginner</option>
-                  <option value="intermediate">Intermediate</option>
-                  <option value="advanced">Advanced</option>
-                </select>
-                <div className="grid grid-cols-2 gap-3">
-                  <Input type="number" min={2} max={7} value={daysPerWeek} onChange={(event) => setDaysPerWeek(Number(event.target.value))} placeholder="Days per week" />
-                  <Input type="number" min={15} max={90} value={sessionMinutes} onChange={(event) => setSessionMinutes(Number(event.target.value))} placeholder="Minutes per session" />
+              <CardContent className="space-y-5">
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium text-stone-700">Fitness Goal</label>
+                  <select value={goal} onChange={(event) => setGoal(event.target.value)} className="h-11 w-full rounded-md border bg-white px-4 text-sm">
+                    <option value="Weight Loss">Weight Loss</option>
+                    <option value="Muscle Gain">Muscle Gain</option>
+                    <option value="Body Recomposition">Body Recomposition</option>
+                    <option value="Fat Loss">Fat Loss</option>
+                    <option value="Maintain Weight">Maintain Weight</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium text-stone-700">Experience Level</label>
+                  <select value={fitnessLevel} onChange={(event) => setFitnessLevel(event.target.value as "beginner" | "intermediate" | "advanced")} className="h-11 w-full rounded-md border bg-white px-4 text-sm">
+                    <option value="beginner">Beginner</option>
+                    <option value="intermediate">Intermediate</option>
+                    <option value="advanced">Advanced</option>
+                  </select>
+                </div>
+
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium text-stone-700">Training Days Per Week</label>
+                    <Input type="number" min={1} max={7} value={daysPerWeek} onChange={(event) => setDaysPerWeek(Number(event.target.value))} placeholder="Days per week" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium text-stone-700">Minutes Per Session</label>
+                    <Input type="number" min={15} max={180} value={sessionMinutes} onChange={(event) => setSessionMinutes(Number(event.target.value))} placeholder="Minutes per session" />
+                  </div>
                 </div>
 
                 <div>
@@ -150,8 +170,15 @@ export default function WorkoutBuilderPage() {
                   </div>
                 </div>
 
-                <Textarea value={constraints} onChange={(event) => setConstraints(event.target.value)} placeholder="Constraints (e.g., only evenings, apartment noise limits)" />
-                <Textarea value={injuries} onChange={(event) => setInjuries(event.target.value)} placeholder="Injuries or limitations (e.g., knee pain, lower back discomfort)" />
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium text-stone-700">Additional Constraints</label>
+                  <Textarea value={constraints} onChange={(event) => setConstraints(event.target.value)} placeholder="Constraints (e.g., only evenings, apartment noise limits)" />
+                </div>
+                
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium text-stone-700">Injuries or Limitations</label>
+                  <Textarea value={injuries} onChange={(event) => setInjuries(event.target.value)} placeholder="Injuries or limitations (e.g., knee pain, lower back discomfort)" />
+                </div>
 
                 <Button onClick={onGenerate} disabled={loading} className="w-full">
                   {loading ? "Generating..." : "Generate AI Workout Plan"}

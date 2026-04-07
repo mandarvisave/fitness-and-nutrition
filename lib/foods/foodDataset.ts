@@ -10,11 +10,15 @@ export type FoodDatasetItem = {
   fat_g: number | null;
   serving_label: string | null;
   serving_grams: number | null;
+  source: "verified" | "inferred";
+  confidence: "high" | "medium" | "low";
+  aliases?: string[];
 };
 
 type ParsedDataset = {
   foods: FoodDatasetItem[];
   byId: Map<string, FoodDatasetItem>;
+  aliasesByFoodId: Map<string, string[]>;
 };
 
 declare global {
@@ -67,7 +71,10 @@ async function loadFoodsFromFoodsTsv(repoRoot: string): Promise<FoodDatasetItem[
       carbs_g: toNumberOrNull(cols[idx.carbs_g]),
       fat_g: toNumberOrNull(cols[idx.fat_g]),
       serving_label: cols[idx.serving_label] ?? null,
-      serving_grams: toNumberOrNull(cols[idx.serving_grams])
+      serving_grams: toNumberOrNull(cols[idx.serving_grams]),
+      source: "verified",
+      confidence: "high",
+      aliases: []
     };
     if (!item.id || !item.name) continue;
     foods.push(item);
@@ -106,19 +113,108 @@ async function loadFoodsFromItemsTsv(repoRoot: string, limit = 25000): Promise<F
       carbs_g: null,
       fat_g: null,
       serving_label: null,
-      serving_grams: null
+      serving_grams: null,
+      source: "inferred",
+      confidence: "low",
+      aliases: []
     });
   }
 
   return foods;
 }
 
+async function loadNormalizedDataset(repoRoot: string): Promise<{ foods: FoodDatasetItem[]; aliasesByFoodId: Map<string, string[]> } | null> {
+  const foodsPath = path.join(repoRoot, "dataset", "normalized", "foods_master.tsv");
+  const aliasesPath = path.join(repoRoot, "dataset", "normalized", "food_aliases.tsv");
+  const servingsPath = path.join(repoRoot, "dataset", "normalized", "serving_conversions.tsv");
+
+  let foodsContent: string;
+  try {
+    foodsContent = await fs.readFile(foodsPath, "utf8");
+  } catch {
+    return null;
+  }
+
+  const aliasesByFoodId = new Map<string, string[]>();
+  try {
+    const aliasesContent = await fs.readFile(aliasesPath, "utf8");
+    const aliasLines = aliasesContent.split(/\r?\n/).filter(Boolean);
+    const aliasHeader = parseTsvLine(aliasLines[0] ?? "");
+    const idx = Object.fromEntries(aliasHeader.map((key, i) => [key, i])) as Record<string, number>;
+    for (const line of aliasLines.slice(1)) {
+      const cols = parseTsvLine(line);
+      const foodId = cols[idx.food_id];
+      const alias = cols[idx.alias];
+      if (!foodId || !alias) continue;
+      const arr = aliasesByFoodId.get(foodId) ?? [];
+      arr.push(alias);
+      aliasesByFoodId.set(foodId, arr);
+    }
+  } catch {}
+
+  const servingsByFoodId = new Map<string, { serving_label: string; serving_grams: number }>();
+  try {
+    const servingsContent = await fs.readFile(servingsPath, "utf8");
+    const servingLines = servingsContent.split(/\r?\n/).filter(Boolean);
+    const servingHeader = parseTsvLine(servingLines[0] ?? "");
+    const idx = Object.fromEntries(servingHeader.map((key, i) => [key, i])) as Record<string, number>;
+    for (const line of servingLines.slice(1)) {
+      const cols = parseTsvLine(line);
+      const foodId = cols[idx.food_id];
+      const servingLabel = cols[idx.serving_label];
+      const grams = toNumberOrNull(cols[idx.grams]);
+      if (!foodId || !servingLabel || grams == null) continue;
+      if (!servingsByFoodId.has(foodId)) {
+        servingsByFoodId.set(foodId, { serving_label: servingLabel, serving_grams: grams });
+      }
+    }
+  } catch {}
+
+  const lines = foodsContent.split(/\r?\n/).filter(Boolean);
+  if (lines.length <= 1) return null;
+  const header = parseTsvLine(lines[0]);
+  const idx = Object.fromEntries(header.map((key, i) => [key, i])) as Record<string, number>;
+
+  const foods: FoodDatasetItem[] = [];
+  for (const line of lines.slice(1)) {
+    const cols = parseTsvLine(line);
+    const id = cols[idx.food_id] ?? "";
+    const name = cols[idx.canonical_name] ?? "";
+    if (!id || !name) continue;
+    const serving = servingsByFoodId.get(id);
+    foods.push({
+      id,
+      name,
+      calories_kcal: toNumberOrNull(cols[idx.calories_per_100g]),
+      protein_g: toNumberOrNull(cols[idx.protein_per_100g]),
+      carbs_g: toNumberOrNull(cols[idx.carbs_per_100g]),
+      fat_g: toNumberOrNull(cols[idx.fat_per_100g]),
+      serving_label: serving?.serving_label ?? "100 g",
+      serving_grams: serving?.serving_grams ?? 100,
+      source: (cols[idx.source] as "verified" | "inferred") ?? "verified",
+      confidence: (cols[idx.confidence] as "high" | "medium" | "low") ?? "high",
+      aliases: aliasesByFoodId.get(id) ?? []
+    });
+  }
+
+  return { foods, aliasesByFoodId };
+}
+
 export async function getFoodDataset(): Promise<ParsedDataset> {
-  if (global.__fitfamilyFoodDataset) return global.__fitfamilyFoodDataset;
+  if (process.env.NODE_ENV !== "development" && global.__fitfamilyFoodDataset) return global.__fitfamilyFoodDataset;
 
   const repoRoot = process.cwd();
+  const normalized = await loadNormalizedDataset(repoRoot);
+  if (normalized && normalized.foods.length > 0) {
+    const byId = new Map(normalized.foods.map((f) => [String(f.id), f]));
+    const parsed = { foods: normalized.foods, byId, aliasesByFoodId: normalized.aliasesByFoodId };
+    global.__fitfamilyFoodDataset = parsed;
+    return parsed;
+  }
+
   const foodsFromFoodsTsv = await loadFoodsFromFoodsTsv(repoRoot);
-  const foods = foodsFromFoodsTsv ?? (await loadFoodsFromItemsTsv(repoRoot));
+  const fallbackFoods = await loadFoodsFromItemsTsv(repoRoot);
+  const foods = [...(foodsFromFoodsTsv ?? []), ...fallbackFoods];
 
   const normalizedFoods = foods
     .map((food) => ({ ...food, name: food.name.trim() }))
@@ -140,9 +236,11 @@ export async function getFoodDataset(): Promise<ParsedDataset> {
 
   const finalFoods = Array.from(bestByName.values());
   const byId = new Map(finalFoods.map((f) => [String(f.id), f]));
+  const aliasesByFoodId = new Map<string, string[]>();
 
-  global.__fitfamilyFoodDataset = { foods: finalFoods, byId };
-  return global.__fitfamilyFoodDataset;
+  const parsed = { foods: finalFoods, byId, aliasesByFoodId };
+  global.__fitfamilyFoodDataset = parsed;
+  return parsed;
 }
 
 export function searchFoods(foods: FoodDatasetItem[], query: string, limit = 20): FoodDatasetItem[] {
@@ -152,9 +250,32 @@ export function searchFoods(foods: FoodDatasetItem[], query: string, limit = 20)
   const scored = foods
     .map((food) => {
       const name = normalizeName(food.name);
+      const aliasHits = (food.aliases ?? []).map(normalizeName);
+      const aliasIdx = aliasHits.reduce((best, alias) => {
+        const i = alias.indexOf(q);
+        if (i === -1) return best;
+        return best === -1 ? i : Math.min(best, i);
+      }, -1);
       const idx = name.indexOf(q);
-      const score = idx === -1 ? Infinity : idx;
-      return { food, score, name };
+      const bestIdx = idx === -1 ? aliasIdx : aliasIdx === -1 ? idx : Math.min(idx, aliasIdx);
+      if (bestIdx === -1) return { food, score: Infinity, name };
+
+      const startsWith = name.startsWith(q);
+      const aliasStartsWith = aliasHits.some((alias) => alias.startsWith(q));
+      const exact = name === q;
+      const aliasExact = aliasHits.includes(q);
+      const tokenStart = name.split(" ").some((token) => token.startsWith(q));
+      const hasNutrition = food.calories_kcal != null;
+      const qualityBoost = hasNutrition ? -8 : 0;
+      const sourceBoost = food.source === "verified" ? -4 : 0;
+      const rank =
+        (exact || aliasExact ? -1000 : 0) +
+        (startsWith || aliasStartsWith ? -200 : 0) +
+        (tokenStart ? -60 : 0) +
+        bestIdx +
+        qualityBoost +
+        sourceBoost;
+      return { food, score: rank, name };
     })
     .filter((x) => Number.isFinite(x.score))
     .sort((a, b) => a.score - b.score || a.name.localeCompare(b.name))

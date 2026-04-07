@@ -6,16 +6,39 @@ import { Card } from "@/components/ui/card";
 import { FoodLogModal, type FoodSearchResult } from "@/components/nutrition/FoodLogModal";
 import { useFoodLogStore } from "@/lib/store/useFoodLogStore";
 
-export function FoodSearchBar() {
+export function FoodSearchBar({ autoFocusOnMount = false }: { autoFocusOnMount?: boolean }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<FoodSearchResult[]>([]);
   const [loading, setLoading] = useState(false);
+  const [showDropdown, setShowDropdown] = useState(false);
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState<FoodSearchResult | null>(null);
   const addEntry = useFoodLogStore((s) => s.addEntry);
   const abortRef = useRef<AbortController | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const searchRef = useRef<HTMLDivElement | null>(null);
 
-  const showDropdown = useMemo(() => query.trim().length >= 2 && (loading || results.length > 0), [query, loading, results.length]);
+  const canShowDropdown = useMemo(() => showDropdown && query.trim().length >= 2 && (loading || results.length > 0), [showDropdown, query, loading, results.length]);
+
+  useEffect(() => {
+    if (!autoFocusOnMount) return;
+    const handle = setTimeout(() => {
+      inputRef.current?.focus();
+      inputRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      setShowDropdown(true);
+    }, 80);
+    return () => clearTimeout(handle);
+  }, [autoFocusOnMount]);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (searchRef.current && !searchRef.current.contains(event.target as Node)) {
+        setShowDropdown(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   useEffect(() => {
     const q = query.trim();
@@ -50,10 +73,20 @@ export function FoodSearchBar() {
   }, [query]);
 
   return (
-    <div className="relative">
-      <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search foods, e.g. idli, rajma, poha" />
+    <div ref={searchRef} className="relative" id="meal-log-search">
+      <Input
+        ref={inputRef}
+        value={query}
+        onFocus={() => setShowDropdown(true)}
+        onClick={() => setShowDropdown(true)}
+        onChange={(event) => {
+          setQuery(event.target.value);
+          setShowDropdown(true);
+        }}
+        placeholder="Search foods, e.g. idli, rajma, poha"
+      />
 
-      {showDropdown ? (
+      {canShowDropdown ? (
         <Card className="absolute left-0 right-0 top-[calc(100%+0.5rem)] z-40 overflow-hidden border bg-white shadow-soft">
           <div className="max-h-72 overflow-auto">
             {loading ? (
@@ -70,7 +103,12 @@ export function FoodSearchBar() {
                     setOpen(true);
                   }}
                 >
-                  <div className="font-medium text-stone-900">{food.name}</div>
+                  <div>
+                    <div className="font-medium text-stone-900">{food.name}</div>
+                    <div className="mt-1 text-[11px] text-stone-500">
+                      {food.source === "verified" ? "Verified nutrition" : "Inferred item"} · confidence {food.confidence ?? "low"}
+                    </div>
+                  </div>
                   <div className="shrink-0 text-xs text-stone-600">
                     {food.calories_kcal == null ? "—" : `${Math.round(food.calories_kcal)} kcal`} · P {food.protein_g ?? "—"} · C {food.carbs_g ?? "—"} · F {food.fat_g ?? "—"}
                   </div>
@@ -98,6 +136,9 @@ export function FoodSearchBar() {
           addEntry({
             foodId: selected?.id ?? "unknown",
             name: selected?.name ?? "Food",
+            hasNutrition: selected?.calories_kcal != null,
+            nutritionSource: selected?.source ?? "inferred",
+            nutritionConfidence: selected?.confidence ?? "low",
             meal,
             servingLabel,
             servingGrams,

@@ -15,7 +15,11 @@ export type FoodMacros = {
 export type LoggedFood = {
   id: string;
   foodId: string;
+  date: string;
   name: string;
+  hasNutrition?: boolean;
+  nutritionSource?: "verified" | "inferred";
+  nutritionConfidence?: "high" | "medium" | "low";
   meal: MealType;
   servingLabel: string;
   servingGrams: number;
@@ -28,10 +32,12 @@ type FoodLogState = {
   dateKey: string;
   entries: LoggedFood[];
   setDateKey: (dateKey: string) => void;
-  addEntry: (entry: Omit<LoggedFood, "id" | "createdAt">) => void;
+  addEntry: (entry: Omit<LoggedFood, "id" | "createdAt" | "date"> & { date?: string }) => void;
   updateEntry: (id: string, patch: Partial<Omit<LoggedFood, "id" | "createdAt">>) => void;
   deleteEntry: (id: string) => void;
   clearAll: () => void;
+  clearByDate: (date: string) => void;
+  copyDateEntries: (sourceDate: string, targetDate: string, replaceTarget?: boolean) => void;
 };
 
 function uid() {
@@ -62,6 +68,10 @@ export function sumMacros(items: Array<{ macros: FoodMacros }>): FoodMacros {
   );
 }
 
+export function getEntriesWithKnownNutrition<T extends { hasNutrition?: boolean }>(items: T[]) {
+  return items.filter((item) => item.hasNutrition !== false);
+}
+
 export const useFoodLogStore = create<FoodLogState>()(
   persist(
     (set, get) => ({
@@ -74,6 +84,7 @@ export const useFoodLogStore = create<FoodLogState>()(
             ...state.entries,
             {
               ...entry,
+              date: entry.date ?? state.dateKey ?? todayKey(),
               id: uid(),
               createdAt: new Date().toISOString()
             }
@@ -84,7 +95,22 @@ export const useFoodLogStore = create<FoodLogState>()(
           entries: state.entries.map((entry) => (entry.id === id ? { ...entry, ...patch } : entry))
         })),
       deleteEntry: (id) => set((state) => ({ entries: state.entries.filter((e) => e.id !== id) })),
-      clearAll: () => set({ entries: [] })
+      clearAll: () => set({ entries: [] }),
+      clearByDate: (date) => set((state) => ({ entries: state.entries.filter((e) => e.date !== date) })),
+      copyDateEntries: (sourceDate, targetDate, replaceTarget = false) =>
+        set((state) => {
+          const sourceEntries = state.entries.filter((entry) => entry.date === sourceDate);
+          if (sourceEntries.length === 0) return state;
+
+          const targetKept = replaceTarget ? state.entries.filter((entry) => entry.date !== targetDate) : state.entries;
+          const cloned = sourceEntries.map((entry) => ({
+            ...entry,
+            id: uid(),
+            date: targetDate,
+            createdAt: new Date().toISOString()
+          }));
+          return { entries: [...targetKept, ...cloned] };
+        })
     }),
     {
       name: "fitfamily-food-log",

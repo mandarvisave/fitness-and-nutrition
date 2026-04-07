@@ -3,24 +3,31 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { FoodLogModal, type FoodSearchResult } from "@/components/nutrition/FoodLogModal";
-import { round1, sumMacros, useFoodLogStore, type LoggedFood, type MealType } from "@/lib/store/useFoodLogStore";
+import { getEntriesWithKnownNutrition, round1, sumMacros, todayKey, useFoodLogStore, type LoggedFood, type MealType } from "@/lib/store/useFoodLogStore";
 import { useMemo, useState } from "react";
 
 export function FoodDiary() {
   const entries = useFoodLogStore((s) => s.entries);
   const deleteEntry = useFoodLogStore((s) => s.deleteEntry);
   const updateEntry = useFoodLogStore((s) => s.updateEntry);
-  const clearAll = useFoodLogStore((s) => s.clearAll);
+  const clearByDate = useFoodLogStore((s) => s.clearByDate);
 
   const [editing, setEditing] = useState<LoggedFood | null>(null);
 
-  const grouped = useMemo(() => {
-    const meals: Record<MealType, LoggedFood[]> = { breakfast: [], lunch: [], dinner: [], snacks: [] };
-    for (const entry of entries) meals[entry.meal].push(entry);
-    return meals;
+  const todaysEntries = useMemo(() => {
+    const today = todayKey();
+    return entries.filter((entry) => entry.date ? entry.date === today : entry.createdAt.slice(0, 10) === today);
   }, [entries]);
 
-  const totals = useMemo(() => sumMacros(entries), [entries]);
+  const grouped = useMemo(() => {
+    const meals: Record<MealType, LoggedFood[]> = { breakfast: [], lunch: [], dinner: [], snacks: [] };
+    for (const entry of todaysEntries) meals[entry.meal].push(entry);
+    return meals;
+  }, [todaysEntries]);
+
+  const knownNutritionEntries = useMemo(() => getEntriesWithKnownNutrition(todaysEntries), [todaysEntries]);
+  const unknownNutritionCount = todaysEntries.length - knownNutritionEntries.length;
+  const totals = useMemo(() => sumMacros(knownNutritionEntries), [knownNutritionEntries]);
 
   return (
     <Card>
@@ -31,8 +38,11 @@ export function FoodDiary() {
             <div className="mt-1 text-sm text-stone-600">
               {Math.round(totals.calories_kcal)} kcal · P {round1(totals.protein_g)} g · C {round1(totals.carbs_g)} g · F {round1(totals.fat_g)} g
             </div>
+            {unknownNutritionCount > 0 ? (
+              <div className="mt-1 text-xs text-amber-700">{unknownNutritionCount} entr{unknownNutritionCount === 1 ? "y has" : "ies have"} unknown nutrition and {unknownNutritionCount === 1 ? "is" : "are"} excluded from totals.</div>
+            ) : null}
           </div>
-          <Button variant="secondary" onClick={clearAll} disabled={entries.length === 0}>
+          <Button variant="secondary" onClick={() => clearByDate(todayKey())} disabled={todaysEntries.length === 0}>
             Clear
           </Button>
         </div>
