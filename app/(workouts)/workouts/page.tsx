@@ -75,6 +75,23 @@ export default function WorkoutsPage() {
             {lifestyleWorkoutTracks.map((track) => <WorkoutTrackCard key={track.slug} track={track} />)}
           </div>
         </section>
+
+        <section className="rounded-[1.5rem] border border-stone-200 bg-white p-6 shadow-soft">
+          <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
+            <div>
+              <div className="inline-flex rounded-full bg-orange-100 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-orange-700">
+                Core plan
+              </div>
+              <h2 className="mt-3 text-2xl font-bold text-stone-950">AI Planner: Custom Workout Plan</h2>
+              <p className="mt-2 max-w-2xl text-stone-600">
+                Build a personalized weekly training plan based on your goal, time, equipment, and limitations.
+              </p>
+            </div>
+            <Button asChild>
+              <Link href="/workouts/builder">Open AI Planner</Link>
+            </Button>
+          </div>
+        </section>
       </main>
     </div>
   );

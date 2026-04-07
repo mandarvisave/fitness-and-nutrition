@@ -19,7 +19,7 @@ export const pricingPlans = [
     name: "Core",
     price: 999,
     description: "For families who want guided habits, meal planning, and score tracking.",
-    features: ["Up to 4 members", "AI meal planner", "Grocery lists", "Weekly reports", "Hindi support"],
+    features: ["Up to 4 members", "AI meal planner", "AI workout planner", "Grocery lists", "Weekly reports", "Hindi support"],
     cta: "Choose Core"
   },
   {

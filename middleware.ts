@@ -16,7 +16,8 @@ const paidOnlyRoutes = [
   "/coaching/dashboard",
   "/nutrition/meal-planner",
   "/nutrition/grocery-list",
-  "/progress/weekly-report"
+  "/progress/weekly-report",
+  "/workouts/builder"
 ];
 
 const publicRoutes = ["/", "/fitness-test", "/blog", "/pricing", "/about", "/how-it-works", "/community/myths"];

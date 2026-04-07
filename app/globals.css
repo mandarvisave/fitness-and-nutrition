@@ -105,3 +105,9 @@ a {
   color: rgb(var(--foreground));
   border-color: rgb(var(--border));
 }
+
+@media print {
+  [data-protected-content="true"] {
+    display: none !important;
+  }
+}

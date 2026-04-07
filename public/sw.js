@@ -1,24 +1,26 @@
+const CACHE_NAME = "fitfamily-v1";
+const OFFLINE_URLS = ["/"];
+
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches.open("fitfamily-static-v1").then((cache) =>
-      cache.addAll(["/", "/manifest.json", "/icons/icon-192.svg", "/icons/icon-512.svg"])
-    )
+    caches.open(CACHE_NAME).then((cache) => cache.addAll(OFFLINE_URLS))
   );
+  self.skipWaiting();
 });
 
-self.addEventListener("fetch", (event) => {
-  if (event.request.method !== "GET") return;
-
-  event.respondWith(
-    caches.match(event.request).then((cached) => {
-      if (cached) return cached;
-      return fetch(event.request)
-        .then((response) => {
-          const cloned = response.clone();
-          caches.open("fitfamily-dynamic-v1").then((cache) => cache.put(event.request, cloned));
-          return response;
-        })
-        .catch(() => caches.match("/"));
-    })
+self.addEventListener("activate", (event) => {
+  event.waitUntil(
+    caches.keys().then((keys) =>
+      Promise.all(
+        keys
+          .filter((key) => key !== CACHE_NAME)
+          .map((key) => caches.delete(key))
+      )
+    )
   );
+  self.clients.claim();
+});
+
+self.addEventListener("fetch", () => {
+  // Minimal no-op fetch handler; app uses network-first behavior.
 });
