@@ -3,9 +3,16 @@
 import { useState, useMemo, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
+import { ArrowLeft, Search, Check, Info, Plus, Trash2 } from "lucide-react";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { useExerciseDiaryStore } from "@/lib/store/useExerciseDiaryStore";
 import { cardioDatabase, strengthDatabase, calculateCardioCalories } from "@/lib/data/exerciseDatabase";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { v4 as uuidv4 } from "uuid";
+
+// We keep a separate type for UI state of sets
+type BuilderSet = { id: string; reps: number; weight: number };
 
 export default function AddExercisePage() {
   const router = useRouter();
@@ -22,8 +29,6 @@ export default function AddExercisePage() {
   const [hasSearched, setHasSearched] = useState(false);
   
   const [sortBy, setSortBy] = useState<"recent" | "name">("recent");
-
-  // Load recent entries safely
   const [recentEntries, setRecentEntries] = useState<any[]>([]);
   
   useEffect(() => {
@@ -36,83 +41,110 @@ export default function AddExercisePage() {
   }, [type, getRecentCardio, getRecentStrength]);
 
   const [checkedItems, setCheckedItems] = useState<Record<string, boolean>>({});
-  // Form overrides for checked items (minutes/calories for cardio, sets/reps/weight for strength)
+  
+  // For Cardio: { key: { minutes: 30, calories: 300 } }
+  // For Strength: { key: [ { id: uuid, reps: 10, weight: 0 }, ... ] }
   const [editValues, setEditValues] = useState<Record<string, any>>({});
 
-  const handleSearch = () => {
+  const handleSearch = async () => {
     setHasSearched(true);
     if (!searchQuery.trim()) {
       setSearchResults([]);
       return;
     }
-    const q = searchQuery.toLowerCase();
-    if (type === "cardio") {
-       setSearchResults(cardioDatabase.filter(e => e.name.toLowerCase().includes(q)));
-    } else {
-       setSearchResults(strengthDatabase.filter(e => e.name.toLowerCase().includes(q)));
+    
+    try {
+        const res = await fetch(`/api/exercises/search?q=${encodeURIComponent(searchQuery)}`);
+        if (!res.ok) throw new Error("Search failed");
+        const data = await res.json();
+        setSearchResults(data.results || []);
+    } catch (err) {
+        console.error(err);
+        setSearchResults([]);
     }
+  };
+
+  const getCardioEdits = (key: string, entryName: string) => {
+     const defaults = { minutes: 30, calories: calculateCardioCalories(entryName, 30) };
+     return editValues[key] || defaults;
+  };
+
+  const getStrengthEdits = (key: string): BuilderSet[] => {
+     const existing = editValues[key];
+     if (Array.isArray(existing)) return existing;
+     // Defaults to 1 empty set for WGER UX
+     return [{ id: uuidv4(), reps: 10, weight: 0 }];
+  };
+
+  const initEditValuesForKeyIfMissing = (key: string, entryName: string) => {
+      setEditValues(prev => {
+          if (prev[key]) return prev;
+          if (type === "cardio") {
+              return { ...prev, [key]: { minutes: 30, calories: calculateCardioCalories(entryName, 30) } };
+          } else {
+              return { ...prev, [key]: [{ id: uuidv4(), reps: 10, weight: 0 }] };
+          }
+      });
+  };
+
+  const handleCardioChange = (key: string, field: string, val: string) => {
+      setEditValues(prev => ({
+         ...prev,
+         [key]: { ...(prev[key] || { minutes: 30, calories: 0 }), [field]: Number(val) }
+      }));
+  };
+
+  const handleStrengthChange = (key: string, setId: string, field: 'reps' | 'weight', val: string) => {
+      setEditValues(prev => {
+         const sets = getStrengthEdits(key);
+         const updated = sets.map(s => s.id === setId ? { ...s, [field]: Number(val) } : s);
+         return { ...prev, [key]: updated };
+      });
+  };
+
+  const handleAddSet = (key: string, e: React.MouseEvent) => {
+     e.stopPropagation();
+     setEditValues(prev => {
+         const sets = getStrengthEdits(key);
+         const lastObj = sets.length > 0 ? sets[sets.length - 1] : { reps: 10, weight: 0 };
+         return { ...prev, [key]: [...sets, { id: uuidv4(), reps: lastObj.reps, weight: lastObj.weight }] };
+     });
+     if (!checkedItems[key]) setCheckedItems(prev => ({...prev, [key]: true}));
+  };
+
+  const handleRemoveSet = (key: string, setId: string, e: React.MouseEvent) => {
+     e.stopPropagation();
+     setEditValues(prev => {
+         const sets = getStrengthEdits(key).filter(s => s.id !== setId);
+         return { ...prev, [key]: sets.length > 0 ? sets : [{ id: uuidv4(), reps: 10, weight: 0 }] };
+     });
+  };
+
+  const handleToggleCheck = (key: string, entryName: string, state: boolean) => {
+      setCheckedItems(prev => ({...prev, [key]: state}));
+      if (state) initEditValuesForKeyIfMissing(key, entryName);
   };
 
   const handleAddChecked = () => {
     let addedCount = 0;
     
-    // Add from recent list
-    recentEntries.forEach((entry, idx) => {
-      const key = `recent-${idx}`;
-      if (checkedItems[key]) {
-        const edits = editValues[key] || {};
-        if (type === "cardio") {
-           addCardio(date, { 
-              name: entry.name, 
-              minutes: Number(edits.minutes || entry.minutes || 30), 
-              calories: Number(edits.calories || entry.calories || calculateCardioCalories(entry.name, 30)) 
-           });
-        } else {
-           addStrength(date, {
-              name: entry.name,
-              sets: Number(edits.sets || entry.sets || 3),
-              reps: Number(edits.reps || entry.reps || 10),
-              weight: Number(edits.weight || entry.weight || 0)
-           });
-        }
-        addedCount++;
+    const processEntry = (entry: any, key: string) => {
+      if (!checkedItems[key]) return;
+      if (type === "cardio") {
+         const edits = getCardioEdits(key, entry.name);
+         addCardio(date, { name: entry.name, minutes: edits.minutes, calories: edits.calories });
+      } else {
+         const sets = getStrengthEdits(key).map(s => ({ id: uuidv4(), reps: s.reps, weight: s.weight }));
+         addStrength(date, { name: entry.name, trackingSets: sets });
       }
-    });
+      addedCount++;
+    };
 
-    // Add from search results
-    searchResults.forEach((entry, idx) => {
-      const key = `search-${idx}`;
-      if (checkedItems[key]) {
-        const edits = editValues[key] || {};
-        if (type === "cardio") {
-           const mins = Number(edits.minutes || 30);
-           addCardio(date, { 
-              name: entry.name, 
-              minutes: mins, 
-              calories: Number(edits.calories || calculateCardioCalories(entry.name, mins)) 
-           });
-        } else {
-           addStrength(date, {
-              name: entry.name,
-              sets: Number(edits.sets || entry.defaultSets || 3),
-              reps: Number(edits.reps || entry.defaultReps || 10),
-              weight: Number(edits.weight || 0)
-           });
-        }
-        addedCount++;
-      }
-    });
+    recentEntries.forEach((entry, idx) => processEntry(entry, `recent-${idx}`));
+    searchResults.forEach((entry, idx) => processEntry(entry, `search-${idx}`));
 
     if (addedCount > 0) {
        router.push("/workouts/diary");
-    }
-  };
-
-  const handleValueChange = (key: string, field: string, value: string) => {
-    setEditValues(prev => ({ ...prev, [key]: { ...prev[key], [field]: value } }));
-    // Auto-check if they type
-    if (!checkedItems[key]) {
-      setCheckedItems(prev => ({ ...prev, [key]: true }));
     }
   };
 
@@ -126,125 +158,200 @@ export default function AddExercisePage() {
 
   if (!mounted) return <div />;
 
-  return (
-    <div className="flex min-h-screen bg-gray-50 flex-col md:flex-row">
-      <Sidebar />
-      <main className="flex-1 p-0 pb-24 md:p-6 lg:p-8">
-        <div className="mx-auto w-full max-w-4xl bg-white shadow-sm border border-gray-200">
-          
-          <div className="bg-[#00529b] text-white">
-            <div className="flex items-center space-x-6 px-4 py-3 text-sm font-semibold">
-              <Link href="/workouts/diary" className="cursor-pointer font-bold hover:underline">Exercise Diary</Link>
-              <span className="cursor-pointer font-normal hover:underline">Database</span>
-              <span className="cursor-pointer font-normal hover:underline">My Exercises</span>
-              <span className="cursor-pointer font-normal hover:underline">Settings</span>
+  const renderCardioEdits = (key: string, entryName: string) => {
+      const vals = getCardioEdits(key, entryName);
+      return (
+         <div className="flex space-x-3 items-center">
+            <div className="flex flex-col">
+                <span className="text-xs text-stone-500 font-medium mb-1">Mins</span>
+                <Input type="number" className="w-20 h-9" value={vals.minutes} onChange={e => { handleCardioChange(key, 'minutes', e.target.value); if(!checkedItems[key]) handleToggleCheck(key, entryName, true); }} />
             </div>
+            <div className="flex flex-col">
+                <span className="text-xs text-stone-500 font-medium mb-1">Kcal</span>
+                <Input type="number" className="w-20 h-9" value={vals.calories} onChange={e => { handleCardioChange(key, 'calories', e.target.value); if(!checkedItems[key]) handleToggleCheck(key, entryName, true); }} />
+            </div>
+         </div>
+      );
+  };
+
+  const renderStrengthEdits = (key: string, entryName: string) => {
+      const sets = getStrengthEdits(key);
+      const isChecked = checkedItems[key];
+      
+      // If not checked, we show a simplified single row for cleanliness, otherwise we show the builder
+      if (!isChecked) {
+          return (
+             <div className="flex space-x-3 items-center opacity-50 pointer-events-none">
+                 <div className="flex flex-col"><span className="text-xs text-stone-500 mb-1">Sets</span><Input disabled className="w-16 h-9" value="1"/></div>
+                 <div className="flex flex-col"><span className="text-xs text-stone-500 mb-1">Reps</span><Input disabled className="w-16 h-9" value="10"/></div>
+                 <div className="flex flex-col"><span className="text-xs text-stone-500 mb-1">Lbs</span><Input disabled className="w-16 h-9" value="0"/></div>
+             </div>
+          );
+      }
+
+      return (
+         <div className="flex flex-col space-y-2 mt-4 sm:mt-0 w-full animate-in fade-in slide-in-from-top-2">
+            <div className="flex justify-between items-center bg-stone-100 rounded-t-lg px-3 py-2 border border-stone-200 border-b-0">
+               <span className="text-xs font-bold text-stone-600 tracking-wider uppercase">Set Builder</span>
+            </div>
+            <div className="border border-stone-200 rounded-b-xl rounded-tr-xl overflow-hidden bg-white">
+                <table className="w-full text-sm">
+                   <thead className="bg-stone-50 border-b border-stone-200">
+                     <tr>
+                        <th className="py-2 px-3 text-center text-xs text-stone-500 font-semibold w-16">Set</th>
+                        <th className="py-2 px-3 text-center text-xs text-stone-500 font-semibold w-24">Reps</th>
+                        <th className="py-2 px-3 text-center text-xs text-stone-500 font-semibold w-24">Lbs</th>
+                        <th className="py-2 px-3 text-center w-12"></th>
+                     </tr>
+                   </thead>
+                   <tbody>
+                      {sets.map((s, i) => (
+                         <tr key={s.id} className="border-b last:border-0 border-stone-100">
+                            <td className="py-2 px-3 text-center font-medium text-stone-600">{i + 1}</td>
+                            <td className="py-2 px-3"><Input type="number" className="w-full h-8 text-center" value={s.reps} onChange={e => handleStrengthChange(key, s.id, 'reps', e.target.value)} /></td>
+                            <td className="py-2 px-3"><Input type="number" className="w-full h-8 text-center" value={s.weight} onChange={e => handleStrengthChange(key, s.id, 'weight', e.target.value)} /></td>
+                            <td className="py-2 px-3 text-center">
+                               {sets.length > 1 && (
+                                   <button onClick={(e) => handleRemoveSet(key, s.id, e)} className="text-stone-400 hover:text-red-500 transition-colors"><Trash2 size={14}/></button>
+                               )}
+                            </td>
+                         </tr>
+                      ))}
+                   </tbody>
+                </table>
+                <div className="p-2 border-t border-stone-100 bg-stone-50 flex justify-center">
+                   <Button variant="ghost" size="sm" onClick={(e) => handleAddSet(key, e)} className="h-8 text-xs font-semibold text-orange-600 hover:text-orange-700 hover:bg-orange-50">
+                      <Plus size={14} className="mr-1"/> Add Set
+                   </Button>
+                </div>
+            </div>
+         </div>
+      );
+  };
+
+  return (
+    <div className="flex min-h-screen bg-stone-50 flex-col md:flex-row">
+      <Sidebar />
+      <main className="flex-1 p-4 md:p-8 overflow-y-auto">
+        <div className="mx-auto max-w-4xl space-y-6 bg-white p-6 rounded-3xl border border-stone-200 shadow-sm">
+          
+          <div className="flex items-center space-x-4 pb-6 border-b border-stone-100">
+             <Button variant="ghost" asChild className="rounded-full text-stone-500 hover:text-stone-900 bg-stone-50 h-10 w-10 p-0">
+               <Link href="/workouts/diary" className="flex items-center justify-center">
+                  <ArrowLeft size={20} />
+               </Link>
+             </Button>
+             <div>
+                <h1 className="text-2xl font-bold text-stone-900 tracking-tight">Add {type === 'cardio' ? 'Cardio' : 'Strength'} Exercise</h1>
+                <p className="text-sm text-stone-500 mt-1">Search the live WGER database or select recent.</p>
+             </div>
           </div>
 
-          <div className="p-6">
-            <h2 className="text-xl font-bold text-[#00529b] mb-6 tracking-tight">Add Exercise</h2>
-
-            <div className="mb-8">
-               <label className="font-bold text-sm text-[#333] block mb-2">Search our exercise database by name:</label>
-               <div className="flex space-x-2">
-                 <input 
+          <div className="flex space-x-3 pt-2">
+              <div className="relative flex-1">
+                 <Search className="absolute left-3 top-2.5 text-stone-400" size={18} />
+                 <Input 
                    type="text" 
                    value={searchQuery}
                    onChange={(e) => setSearchQuery(e.target.value)}
                    onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-                   className="flex-1 border border-gray-300 p-2 text-sm focus:outline-none focus:border-[#00529b]" 
+                   placeholder="Search exercise database by name..." 
+                   className="pl-10 h-10 w-full bg-stone-50 border-stone-200 rounded-xl focus-visible:ring-orange-500"
                  />
-                 <button onClick={handleSearch} className="bg-[#5cb85c] hover:bg-[#4cae4c] text-white px-6 font-bold rounded shadow-sm text-sm shrink-0">
-                    Search
-                 </button>
-               </div>
+              </div>
+              <Button onClick={handleSearch} className="h-10 px-6 rounded-xl bg-stone-900 hover:bg-stone-800 text-white shadow-sm">
+                 Search
+              </Button>
+          </div>
+
+          {hasSearched && searchResults.length > 0 && (
+            <div className="pt-4 animate-in fade-in slide-in-from-top-2 duration-300">
+              <h3 className="font-semibold text-stone-900 mb-3 text-lg flex justify-between items-center">
+                 Search Results
+                 <Button onClick={handleAddChecked} size="sm" className="bg-orange-600 hover:bg-orange-700 rounded-lg shadow-sm">
+                    Add Selected to Diary
+                 </Button>
+              </h3>
+              <div className="space-y-3">
+                {searchResults.map((entry, idx) => {
+                  const key = `search-${idx}`;
+                  const isChecked = !!checkedItems[key];
+                  return (
+                    <div key={key} className={`flex flex-col sm:flex-row p-4 rounded-2xl border transition-colors ${isChecked ? 'bg-orange-50/30 border-orange-200 shadow-sm' : 'bg-white border-stone-200 hover:border-stone-300'}`}>
+                      <div className="flex items-center flex-1 mb-3 sm:mb-0 cursor-pointer" onClick={() => handleToggleCheck(key, entry.name, !isChecked)}>
+                         <div className={`w-6 h-6 mr-4 rounded border flex items-center justify-center transition-colors ${isChecked ? 'bg-orange-600 border-orange-600' : 'border-stone-300 bg-white'}`}>
+                            {isChecked && <Check size={16} className="text-white" />}
+                         </div>
+                         <div>
+                            <span className="text-stone-900 font-bold block">{entry.name}</span>
+                            <span className="text-xs text-stone-400 font-medium uppercase tracking-wider">{entry.category || "General"}</span>
+                         </div>
+                      </div>
+                      <div className="sm:w-[60%] sm:pl-4">
+                        {type === "cardio" ? renderCardioEdits(key, entry.name) : renderStrengthEdits(key, entry.name)}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="mt-6 flex justify-end">
+                 <Button onClick={handleAddChecked} className="bg-orange-600 hover:bg-orange-700 rounded-xl px-8 shadow-sm h-11">
+                    Add Selected to Diary
+                 </Button>
+              </div>
+            </div>
+          )}
+
+          <div className="pt-8">
+            <div className="flex flex-col sm:flex-row justify-between sm:items-end mb-4 border-b border-stone-100 pb-2">
+               <h3 className="font-semibold text-stone-900 text-lg">Recent Exercises</h3>
+               {displayEntries.length > 0 && (
+                 <div className="text-xs font-medium text-stone-500 flex items-center space-x-3 mt-3 sm:mt-0 bg-stone-100 px-3 py-1.5 rounded-full">
+                   <span>Sort:</span>
+                   <label className="flex items-center space-x-1 cursor-pointer"><input type="radio" name="sort" className="accent-stone-500" checked={sortBy === "recent"} onChange={() => setSortBy("recent")}/> <span>Recent</span></label>
+                   <label className="flex items-center space-x-1 cursor-pointer"><input type="radio" name="sort" className="accent-stone-500" checked={sortBy === "name"} onChange={() => setSortBy("name")}/> <span>A-Z</span></label>
+                 </div>
+               )}
             </div>
 
-            {hasSearched && searchResults.length > 0 && (
-              <div className="mb-10">
-                <h3 className="font-bold text-[#00529b] mb-3">Search Results:</h3>
-                <div className="border border-gray-200">
-                  {searchResults.map((entry, idx) => {
-                    const key = `search-${idx}`;
+            {displayEntries.length === 0 ? (
+              <div className="bg-stone-50 rounded-2xl border border-stone-200 border-dashed p-8 text-center flex flex-col items-center">
+                 <div className="bg-white p-3 rounded-full mb-3 text-stone-300">
+                    <Info size={24} />
+                 </div>
+                 <p className="text-stone-600 font-medium mb-1">No recent exercises found</p>
+                 <p className="text-sm text-stone-500 max-w-sm">As you log exercises to your diary, your most frequently used items will appear here for fast logging.</p>
+              </div>
+            ) : (
+              <div className="animate-in fade-in duration-300">
+                <div className="space-y-3 mb-4">
+                  {displayEntries.map((entry, idx) => {
+                    const key = `recent-${idx}`;
+                    const isChecked = !!checkedItems[key];
                     return (
-                      <div key={key} className={`flex items-center p-2 text-sm border-b ${idx % 2 === 0 ? 'bg-[#f9f9f9]' : 'bg-white'}`}>
-                        <input type="checkbox" className="mr-3" checked={!!checkedItems[key]} onChange={(e) => setCheckedItems(prev => ({...prev, [key]: e.target.checked}))} />
-                        <span className="flex-1 text-[#00529b] font-medium">{entry.name}</span>
-                        {type === "cardio" ? (
-                          <div className="flex space-x-4 items-center">
-                            <span>Minutes: <input type="number" className="border w-16 px-1 ml-1" value={editValues[key]?.minutes || 30} onChange={e => handleValueChange(key, 'minutes', e.target.value)} /></span>
-                            <span>Calories: <input type="number" className="border w-16 px-1 ml-1" value={editValues[key]?.calories || calculateCardioCalories(entry.name, parseInt(editValues[key]?.minutes || 30))} onChange={e => handleValueChange(key, 'calories', e.target.value)} /></span>
-                          </div>
-                        ) : (
-                          <div className="flex space-x-4 items-center">
-                            <span>Sets: <input type="number" className="border w-12 px-1 ml-1" value={editValues[key]?.sets || entry.defaultSets} onChange={e => handleValueChange(key, 'sets', e.target.value)} /></span>
-                            <span>Reps: <input type="number" className="border w-12 px-1 ml-1" value={editValues[key]?.reps || entry.defaultReps} onChange={e => handleValueChange(key, 'reps', e.target.value)} /></span>
-                            <span>Weight: <input type="number" className="border w-12 px-1 ml-1" value={editValues[key]?.weight || 0} onChange={e => handleValueChange(key, 'weight', e.target.value)} /></span>
-                          </div>
-                        )}
-                      </div>
+                       <div key={key} className={`flex flex-col sm:flex-row p-4 rounded-2xl border transition-colors ${isChecked ? 'bg-orange-50/30 border-orange-200 shadow-sm' : 'bg-white border-stone-200 hover:border-stone-300'}`}>
+                         <div className="flex items-center flex-1 mb-3 sm:mb-0 cursor-pointer" onClick={() => handleToggleCheck(key, entry.name, !isChecked)}>
+                            <div className={`w-6 h-6 mr-4 rounded border flex items-center justify-center transition-colors ${isChecked ? 'bg-orange-600 border-orange-600' : 'border-stone-300 bg-white'}`}>
+                               {isChecked && <Check size={16} className="text-white" />}
+                            </div>
+                            <span className="text-stone-900 font-bold block">{entry.name}</span>
+                         </div>
+                         <div className="sm:w-[60%] sm:pl-4">
+                           {type === "cardio" ? renderCardioEdits(key, entry.name) : renderStrengthEdits(key, entry.name)}
+                         </div>
+                       </div>
                     );
                   })}
                 </div>
-                <div className="mt-3">
-                   <button onClick={handleAddChecked} className="bg-[#5cb85c] hover:bg-[#4cae4c] text-white px-4 py-1.5 font-bold rounded shadow-sm text-sm">Add Checked</button>
+                <div className="flex justify-end">
+                   <Button onClick={handleAddChecked} className="bg-orange-600 hover:bg-orange-700 rounded-xl px-8 shadow-sm h-11">
+                      Add Selected to Diary
+                   </Button>
                 </div>
               </div>
             )}
-
-            <div>
-              <div className="flex justify-between items-center mb-4">
-                 <p className="font-bold text-sm text-[#333]">
-                   Or, add your most recently used {type === "strength" ? "strength training" : "cardio"} exercises.
-                 </p>
-              </div>
-
-              {displayEntries.length === 0 ? (
-                <div className="bg-[#f6f6f6] border border-gray-200 p-6 text-sm text-gray-600">
-                   <p className="mb-4">You have not added any {type === "strength" ? "strength training" : "cardio"} exercises yet.</p>
-                   <p><strong>TIP:</strong> As you add entries to your exercise diary, the exercises you've performed most recently will appear in this list so that you can quickly add them to your diary.</p>
-                </div>
-              ) : (
-                <>
-                  <div className="flex justify-between items-end mb-2">
-                    <button onClick={handleAddChecked} className="bg-[#5cb85c] hover:bg-[#4cae4c] text-white px-4 py-1.5 font-bold rounded shadow-sm text-sm">Add Checked</button>
-                    <div className="text-[11px] font-bold flex items-center space-x-2">
-                      <span>Sort by:</span>
-                      <label className="flex items-center space-x-1 cursor-pointer font-normal"><input type="radio" name="sort" checked={sortBy === "recent"} onChange={() => setSortBy("recent")}/> <span>Most Recent</span></label>
-                      <label className="flex items-center space-x-1 cursor-pointer font-normal"><input type="radio" name="sort" checked={sortBy === "name"} onChange={() => setSortBy("name")}/> <span>Name</span></label>
-                    </div>
-                  </div>
-
-                  <div className="border border-gray-200 mb-3">
-                    {displayEntries.map((entry, idx) => {
-                      const key = `recent-${idx}`;
-                      return (
-                        <div key={key} className={`flex items-center p-2 text-sm border-b ${idx % 2 === 0 ? 'bg-[#f9f9f9]' : 'bg-white'}`}>
-                          <input type="checkbox" className="mr-3" checked={!!checkedItems[key]} onChange={(e) => setCheckedItems(prev => ({...prev, [key]: e.target.checked}))} />
-                           <span className="flex-1 text-gray-600 font-medium">{entry.name}</span>
-                          {type === "cardio" ? (
-                            <div className="flex space-x-4 items-center">
-                              <span className="text-gray-500 text-xs">Minutes: <input type="number" className="border w-12 px-1 ml-1 text-black text-sm" value={editValues[key]?.minutes || entry.minutes} onChange={e => handleValueChange(key, 'minutes', e.target.value)} /></span>
-                              <span className="text-gray-500 text-xs">Calories: <input type="number" className="border w-12 px-1 ml-1 text-black text-sm" value={editValues[key]?.calories || entry.calories} onChange={e => handleValueChange(key, 'calories', e.target.value)} /></span>
-                            </div>
-                          ) : (
-                            <div className="flex space-x-4 items-center gap-1">
-                              <span className="text-gray-500 text-xs">Sets: <input type="number" className="border w-10 px-1 text-black text-sm" value={editValues[key]?.sets || entry.sets} onChange={e => handleValueChange(key, 'sets', e.target.value)} /></span>
-                              <span className="text-gray-500 text-xs">Reps: <input type="number" className="border w-10 px-1 text-black text-sm" value={editValues[key]?.reps || entry.reps} onChange={e => handleValueChange(key, 'reps', e.target.value)} /></span>
-                              <span className="text-gray-500 text-xs">Weight: <input type="number" className="border w-10 px-1 text-black text-sm" value={editValues[key]?.weight || entry.weight} onChange={e => handleValueChange(key, 'weight', e.target.value)} /></span>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                  
-                  <button onClick={handleAddChecked} className="bg-[#5cb85c] hover:bg-[#4cae4c] text-white px-4 py-1.5 font-bold rounded shadow-sm text-sm">Add Checked</button>
-                </>
-              )}
-            </div>
-
           </div>
+
         </div>
       </main>
     </div>

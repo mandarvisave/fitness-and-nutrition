@@ -1,10 +1,14 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, Fragment } from "react";
 import Link from "next/link";
-import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Info, Edit2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Edit2, Copy, FileText, Plus, Trash2 } from "lucide-react";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { useExerciseDiaryStore } from "@/lib/store/useExerciseDiaryStore";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 
 // Minimal Date Helpers
 function formatDateLabel(dateStr: string) {
@@ -21,7 +25,6 @@ function getTodayStr() {
 }
 
 export default function ExerciseDiaryPage() {
-  // We use hydration-safe init
   const [mounted, setMounted] = useState(false);
   const [currentDate, setCurrentDate] = useState<string>("");
   
@@ -37,7 +40,6 @@ export default function ExerciseDiaryPage() {
   const dailyCardioMinutes = dailyData.cardio.reduce((acc, curr) => acc + curr.minutes, 0);
   const dailyCardioCalories = dailyData.cardio.reduce((acc, curr) => acc + curr.calories, 0);
 
-  // Simplified weekly logic for demonstration (assuming M-S week block for simplicity, here we just do rolling 7 days)
   const weeklyCardioMinutes = useMemo(() => {
     if (!currentDate) return 0;
     let total = 0;
@@ -68,175 +70,234 @@ export default function ExerciseDiaryPage() {
     copyWorkout(yesterday, currentDate);
   };
 
-  if (!mounted || !currentDate) return <div className="flex min-h-screen bg-background"><Sidebar /><main className="flex-1" /></div>;
+  if (!mounted || !currentDate) return <div className="flex min-h-screen bg-stone-50"><Sidebar /><main className="flex-1" /></div>;
 
   return (
-    <div className="flex min-h-screen bg-gray-50 flex-col md:flex-row">
+    <div className="flex min-h-screen bg-stone-50 flex-col md:flex-row">
       <Sidebar />
-      <main className="flex-1 p-0 pb-24 md:p-6 lg:p-8">
-        
-        <div className="mx-auto w-full max-w-4xl bg-white shadow-sm border border-gray-200">
+      <main className="flex-1 p-4 md:p-8 overflow-y-auto">
+        <div className="mx-auto w-full max-w-5xl space-y-6">
           
-          {/* Header Navigation */}
-          <div className="bg-[#00529b] text-white">
-            <div className="flex items-center space-x-6 px-4 py-3 text-sm font-semibold">
-              <span className="cursor-pointer font-bold">Exercise Diary</span>
-              <span className="cursor-pointer font-normal hover:underline">Database</span>
-              <span className="cursor-pointer font-normal hover:underline">My Exercises</span>
-              <span className="cursor-pointer font-normal hover:underline">Settings</span>
-            </div>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-6 border-b border-stone-200">
+             <div>
+                <h1 className="text-3xl font-bold tracking-tight text-stone-900">Exercise Diary</h1>
+                <p className="text-stone-500 mt-1">Track your cardio and strength workouts over time.</p>
+             </div>
+             
+             <div className="mt-4 sm:mt-0 flex items-center space-x-2 bg-white border border-stone-200 rounded-xl p-1 shadow-sm">
+               <Button variant="ghost" size="icon" onClick={() => setCurrentDate(addDays(currentDate, -1))} className="h-8 w-8 text-stone-600">
+                  <ChevronLeft size={18} />
+               </Button>
+               <div className="px-4 text-sm font-semibold text-stone-800 text-center min-w-[220px]">
+                  {formatDateLabel(currentDate)}
+               </div>
+               <Button variant="ghost" size="icon" onClick={() => setCurrentDate(addDays(currentDate, 1))} className="h-8 w-8 text-stone-600">
+                  <ChevronRight size={18} />
+               </Button>
+             </div>
           </div>
 
-          <div className="p-6">
-            
-            {/* Date Navigation */}
-            <div className="flex items-center space-x-3 mb-8 text-[#00529b]">
-               <h2 className="text-xl font-bold">Your Exercise Diary for:</h2>
-               <div className="flex items-center bg-[#00529b] text-white rounded overflow-hidden shadow">
-                 <button onClick={() => setCurrentDate(addDays(currentDate, -1))} className="px-2 py-1.5 hover:bg-[#004280]">
-                    <ChevronLeft size={18} />
-                 </button>
-                 <div className="px-4 font-bold text-[15px] select-none min-w-[200px] text-center">
-                    {formatDateLabel(currentDate)}
-                 </div>
-                 <button onClick={() => setCurrentDate(addDays(currentDate, 1))} className="px-2 py-1.5 hover:bg-[#004280]">
-                    <ChevronRight size={18} />
-                 </button>
-               </div>
-               <CalendarIcon className="text-gray-500 cursor-pointer hover:text-gray-700" size={24} />
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-2 space-y-6">
+
+              {/* CARDIOVASCULAR SECTION */}
+              <Card className="shadow-sm border-stone-200">
+                 <CardHeader className="flex flex-row items-center justify-between pb-4">
+                    <CardTitle className="text-xl font-bold text-stone-900">Cardiovascular</CardTitle>
+                    <div className="flex space-x-2">
+                       <Button variant="outline" size="sm" onClick={handleCopyYesterday} title="Copy Yesterday" className="h-8 shadow-sm">
+                           <Copy className="h-4 w-4 mr-2" /> Quick Copy
+                       </Button>
+                       <Button size="sm" asChild className="h-8 shadow-sm bg-orange-600 hover:bg-orange-700">
+                           <Link href={`/workouts/diary/add?type=cardio&date=${currentDate}`}>
+                             <Plus className="h-4 w-4 mr-2" /> Add 
+                           </Link>
+                       </Button>
+                    </div>
+                 </CardHeader>
+                 <CardContent>
+                    <div className="rounded-xl border border-stone-200 overflow-hidden">
+                      <table className="w-full text-sm">
+                        <thead className="bg-stone-50 text-stone-500 font-medium border-b border-stone-200">
+                          <tr>
+                             <th className="py-3 px-4 text-left font-medium w-[50%]">Exercise</th>
+                             <th className="py-3 px-4 text-center font-medium">Minutes</th>
+                             <th className="py-3 px-4 text-center font-medium">Calories</th>
+                             <th className="py-3 px-4 w-12 text-center text-transparent">Action</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {dailyData.cardio.map((ex, idx) => (
+                            <tr key={ex.id} className="border-b last:border-0 border-stone-100 hover:bg-stone-50/50 transition-colors">
+                               <td className="py-3 px-4 text-stone-900 font-medium">{ex.name}</td>
+                               <td className="py-3 px-4 text-center text-stone-600">{ex.minutes}</td>
+                               <td className="py-3 px-4 text-center text-orange-600 font-medium">{ex.calories}</td>
+                               <td className="py-3 px-4 text-center">
+                                 <button onClick={() => removeCardio(currentDate, ex.id)} className="text-stone-400 hover:text-red-500 transition-colors">
+                                    <Trash2 size={16} />
+                                 </button>
+                               </td>
+                            </tr>
+                          ))}
+                          {dailyData.cardio.length === 0 && (
+                             <tr><td colSpan={4} className="py-8 text-center text-stone-400 text-sm italic">No cardiovascular exercises logged today.</td></tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                 </CardContent>
+              </Card>
+
+              {/* STRENGTH SECTION */}
+              <Card className="shadow-sm border-stone-200">
+                 <CardHeader className="flex flex-row items-center justify-between pb-4">
+                    <CardTitle className="text-xl font-bold text-stone-900">Strength Training</CardTitle>
+                    <div className="flex space-x-2">
+                       <Button variant="outline" size="sm" onClick={handleCopyYesterday} title="Copy Yesterday" className="h-8 shadow-sm">
+                           <Copy className="h-4 w-4 mr-2" /> Quick Copy
+                       </Button>
+                       <Button size="sm" asChild className="h-8 shadow-sm bg-orange-600 hover:bg-orange-700">
+                           <Link href={`/workouts/diary/add?type=strength&date=${currentDate}`}>
+                             <Plus className="h-4 w-4 mr-2" /> Add 
+                           </Link>
+                       </Button>
+                    </div>
+                 </CardHeader>
+                 <CardContent>
+                    <div className="rounded-xl border border-stone-200 overflow-hidden">
+                      <table className="w-full text-sm">
+                         <thead className="bg-stone-50 text-stone-500 font-medium border-b border-stone-200">
+                          <tr>
+                             <th className="py-3 px-4 text-left font-medium w-[40%]">Exercise</th>
+                             <th className="py-3 px-4 text-center font-medium">Sets</th>
+                             <th className="py-3 px-4 text-center font-medium">Volume (lbs)</th>
+                             <th className="py-3 px-4 w-12 text-center text-transparent">Action</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {dailyData.strength.map((ex, idx) => (
+                            <Fragment key={ex.id}>
+                               <tr className="border-b border-stone-100 hover:bg-stone-50/50 transition-colors">
+                                  <td className="py-3 px-4 text-stone-900 font-bold">{ex.name}</td>
+                                  <td className="py-3 px-4 text-center text-stone-600">{ex.trackingSets?.length || 0}</td>
+                                  <td className="py-3 px-4 text-center text-stone-500 text-sm">{ex.trackingSets?.reduce((acc, s) => acc + (s.reps * s.weight), 0).toLocaleString()}</td>
+                                  <td className="py-3 px-4 text-center">
+                                    <button onClick={() => removeStrength(currentDate, ex.id)} className="text-stone-400 hover:text-red-500 transition-colors">
+                                       <Trash2 size={16} />
+                                    </button>
+                                  </td>
+                               </tr>
+                               {ex.trackingSets && ex.trackingSets.length > 0 && (
+                                   <tr className="border-b last:border-0 border-stone-200 bg-stone-50/30">
+                                       <td colSpan={4} className="p-0">
+                                           <div className="pl-12 pr-6 py-3 text-sm text-stone-600">
+                                               <div className="grid grid-cols-3 gap-4 text-center font-semibold text-stone-400 text-xs uppercase tracking-wider mb-2">
+                                                   <div>Set</div><div>Reps</div><div>Weight</div>
+                                               </div>
+                                               <div className="space-y-1">
+                                                 {ex.trackingSets.map((s, i) => (
+                                                     <div key={s.id} className="grid grid-cols-3 gap-4 text-center py-1 border-b border-stone-100 last:border-0">
+                                                         <div className="font-medium text-stone-500">{i + 1}</div>
+                                                         <div className="font-semibold text-stone-800">{s.reps}</div>
+                                                         <div className="font-semibold text-stone-800">{s.weight} <span className="text-stone-400 font-normal text-xs ml-1">lbs</span></div>
+                                                     </div>
+                                                 ))}
+                                               </div>
+                                           </div>
+                                       </td>
+                                   </tr>
+                               )}
+                            </Fragment>
+                          ))}
+                          {dailyData.strength.length === 0 && (
+                             <tr><td colSpan={4} className="py-8 text-center text-stone-400 text-sm italic">No strength training exercises logged today.</td></tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                 </CardContent>
+              </Card>
+
             </div>
 
-            {/* CARDIOVASCULAR SECTION */}
-            <div className="mb-6">
-              <div className="flex justify-between items-end mb-2">
-                 <h3 className="text-[22px] font-bold text-[#00529b]">Cardiovascular</h3>
-              </div>
-              <div className="border-t-2 border-[#00529b]">
-                 <table className="w-full text-sm">
-                   <thead>
-                     <tr className="bg-[#00529b] text-white">
-                        <th className="py-2 px-3 text-left w-[50%]">Exercise</th>
-                        <th className="py-2 px-3 text-center border-l border-[#004280]">Minutes</th>
-                        <th className="py-2 px-3 text-center border-l border-[#004280]">Calories Burned</th>
-                        <th className="py-2 px-3 w-10"></th>
-                     </tr>
-                   </thead>
-                   <tbody>
-                     {dailyData.cardio.map((ex, idx) => (
-                       <tr key={ex.id} className={idx % 2 === 0 ? "bg-[#f6f6f6]" : "bg-white"}>
-                          <td className="py-2.5 px-3 border-b text-[#00529b]">{ex.name}</td>
-                          <td className="py-2.5 px-3 border-b text-center">{ex.minutes}</td>
-                          <td className="py-2.5 px-3 border-b text-center">{ex.calories}</td>
-                          <td className="py-2.5 px-3 border-b text-center">
-                            <button onClick={() => removeCardio(currentDate, ex.id)} className="text-red-500 text-lg hover:text-red-700 font-bold" title="Remove">&times;</button>
-                          </td>
-                       </tr>
-                     ))}
-                     {!dailyData.cardio.length && (
-                        <tr><td colSpan={4} className="py-4 px-3 border-b text-gray-500 italic">No cardiovascular exercises logged today.</td></tr>
-                     )}
-                   </tbody>
-                 </table>
-                 
-                 <div className="py-3 text-[13px] font-bold text-[#00529b] flex space-x-3">
-                    <Link href={`/workouts/diary/add?type=cardio&date=${currentDate}`} className="hover:underline">Add Exercise</Link>
-                    <span className="text-gray-300">|</span>
-                    <button onClick={handleCopyYesterday} className="hover:underline">Quick Tools: Copy Yesterday</button>
-                 </div>
-              </div>
+            <div className="space-y-6">
+               
+               {/* SIDEBAR WIDGETS */}
+               <Card className="shadow-sm border-stone-200">
+                 <CardHeader className="pb-3">
+                   <CardTitle className="text-lg font-bold text-stone-900">Cardio Goals</CardTitle>
+                 </CardHeader>
+                 <CardContent className="space-y-4">
+                   
+                    <div>
+                      <div className="flex justify-between items-center text-sm mb-1">
+                        <span className="text-stone-600">Daily Minutes</span>
+                        <span className="font-semibold text-stone-900">{dailyCardioMinutes} <span className="text-stone-400">/ {dailyGoalMinutes}</span></span>
+                      </div>
+                      <div className="w-full bg-stone-100 rounded-full h-2">
+                        <div className="bg-orange-500 h-2 rounded-full" style={{ width: `${Math.min(100, (dailyCardioMinutes / dailyGoalMinutes) * 100)}%` }}></div>
+                      </div>
+                    </div>
 
-              {/* Totals Box */}
-              <div className="mt-2 bg-[#f6f6f6] border text-sm max-w-[50%] ml-auto">
-                 <div className="flex py-2 px-4 border-b">
-                    <span className="w-1/2 font-bold text-right pr-4 text-black">Daily Total <span className="font-normal text-[#00529b]">/ Goal</span></span>
-                    <span className="w-1/4 text-center font-bold">{dailyCardioMinutes} <span className="font-normal text-[#00529b]">/ {dailyGoalMinutes}</span></span>
-                    <span className="w-1/4 text-center font-bold">{dailyCardioCalories} <span className="font-normal text-[#00529b]">/ 0</span></span>
-                 </div>
-                 <div className="flex py-2 px-4">
-                    <span className="w-1/2 font-bold text-right pr-4 text-black">Weekly Total <span className="font-normal text-[#00529b]">/ Goal</span></span>
-                    <span className="w-1/4 text-center font-bold">{weeklyCardioMinutes} <span className="font-normal text-[#00529b]">/ {weeklyGoalMinutes}</span></span>
-                    <span className="w-1/4 text-center font-bold">- <span className="font-normal text-[#00529b]">/ 0</span></span>
-                 </div>
-              </div>
-            </div>
+                    <div>
+                      <div className="flex justify-between items-center text-sm mb-1">
+                        <span className="text-stone-600">Weekly Minutes</span>
+                        <span className="font-semibold text-stone-900">{weeklyCardioMinutes} <span className="text-stone-400">/ {weeklyGoalMinutes}</span></span>
+                      </div>
+                      <div className="w-full bg-stone-100 rounded-full h-2">
+                        <div className="bg-orange-600 h-2 rounded-full" style={{ width: `${Math.min(100, (weeklyCardioMinutes / weeklyGoalMinutes) * 100)}%` }}></div>
+                      </div>
+                    </div>
 
-            {/* STRENGTH SECTION */}
-            <div className="mb-8">
-              <div className="flex justify-between items-end mb-2">
-                 <h3 className="text-[22px] font-bold text-[#00529b]">Strength Training</h3>
-              </div>
-              <div className="border-t-2 border-[#00529b]">
-                 <table className="w-full text-sm">
-                   <thead>
-                     <tr className="bg-[#00529b] text-white">
-                        <th className="py-2 px-3 text-left w-[40%]">Exercise</th>
-                        <th className="py-2 px-3 text-center border-l border-[#004280]">Sets</th>
-                        <th className="py-2 px-3 text-center border-l border-[#004280]">Reps/Set</th>
-                        <th className="py-2 px-3 text-center border-l border-[#004280]">Weight/Set</th>
-                        <th className="py-2 px-3 w-10"></th>
-                     </tr>
-                   </thead>
-                   <tbody>
-                     {dailyData.strength.map((ex, idx) => (
-                       <tr key={ex.id} className={idx % 2 === 0 ? "bg-[#f6f6f6]" : "bg-white"}>
-                          <td className="py-2.5 px-3 border-b text-[#00529b]">{ex.name}</td>
-                          <td className="py-2.5 px-3 border-b text-center">{ex.sets}</td>
-                          <td className="py-2.5 px-3 border-b text-center">{ex.reps}</td>
-                          <td className="py-2.5 px-3 border-b text-center">{ex.weight}</td>
-                          <td className="py-2.5 px-3 border-b text-center">
-                            <button onClick={() => removeStrength(currentDate, ex.id)} className="text-red-500 text-lg hover:text-red-700 font-bold" title="Remove">&times;</button>
-                          </td>
-                       </tr>
-                     ))}
-                     {!dailyData.strength.length && (
-                        <tr><td colSpan={5} className="py-4 px-3 border-b text-gray-500 italic">No strength training exercises logged today.</td></tr>
-                     )}
-                   </tbody>
-                 </table>
-                 
-                 <div className="py-3 text-[13px] font-bold text-[#00529b] flex space-x-3">
-                    <Link href={`/workouts/diary/add?type=strength&date=${currentDate}`} className="hover:underline">Add Exercise</Link>
-                    <span className="text-gray-300">|</span>
-                    <button onClick={handleCopyYesterday} className="hover:underline">Quick Tools: Copy Yesterday</button>
-                 </div>
-              </div>
-            </div>
-
-            {/* NOTES SECTION */}
-            <div className="mb-8">
-               <div className="flex justify-between items-center bg-[#f6f6f6] border border-gray-200 px-3 py-2 text-[#00529b] font-bold text-sm">
-                  <span>Today's Exercise Notes</span>
-                  <button onClick={() => setIsEditingNotes(true)} className="flex items-center hover:underline text-[12px] font-normal">
-                    <Edit2 size={12} className="mr-1" /> Edit Note
-                  </button>
-               </div>
-               <div className="border border-t-0 p-3 min-h-[100px] text-sm">
-                  {isEditingNotes ? (
-                     <div className="flex flex-col">
-                       <textarea 
-                          className="w-full border p-2 mb-2 focus:outline-blue-500" 
-                          rows={3} 
-                          value={notesDraft}
-                          onChange={(e) => setNotesDraft(e.target.value)}
-                       />
-                       <div className="flex space-x-2">
-                         <button onClick={handleSaveNotes} className="bg-[#5cb85c] text-white px-3 py-1 text-sm font-bold rounded">Save</button>
-                         <button onClick={() => { setIsEditingNotes(false); setNotesDraft(dailyData.notes); }} className="bg-gray-200 text-black px-3 py-1 text-sm font-bold rounded">Cancel</button>
+                    <div className="pt-3 border-t border-stone-100 mt-2">
+                       <div className="flex justify-between items-center text-sm">
+                          <span className="text-stone-600">Daily Calories Burned</span>
+                          <span className="font-bold text-orange-600">{dailyCardioCalories} kcal</span>
                        </div>
-                     </div>
-                  ) : (
-                     <div className="whitespace-pre-wrap">{dailyData.notes || <span className="text-gray-400 italic"></span>}</div>
-                  )}
-               </div>
-            </div>
+                    </div>
 
-            <div className="flex justify-center mt-6">
-              <button className="bg-[#5cb85c] hover:bg-[#4cae4c] text-white px-6 py-2 rounded text-[15px] font-bold shadow-sm" onClick={() => window.print()}>
-                 View Full Report (Printable)
-              </button>
-            </div>
+                 </CardContent>
+               </Card>
 
+               <Card className="shadow-sm border-stone-200">
+                 <CardHeader className="pb-3 flex flex-row items-center justify-between">
+                   <CardTitle className="text-lg font-bold text-stone-900">Today's Notes</CardTitle>
+                   {!isEditingNotes && (
+                      <Button variant="ghost" size="icon" onClick={() => setIsEditingNotes(true)} className="h-6 w-6 text-stone-400 hover:text-stone-600">
+                         <Edit2 size={14} />
+                      </Button>
+                   )}
+                 </CardHeader>
+                 <CardContent>
+                    {isEditingNotes ? (
+                       <div className="space-y-3">
+                         <Textarea 
+                            className="w-full min-h-[100px] text-sm resize-none bg-stone-50 border-stone-200 focus-visible:ring-orange-500" 
+                            value={notesDraft}
+                            onChange={(e) => setNotesDraft(e.target.value)}
+                            placeholder="How did you feel today?"
+                         />
+                         <div className="flex space-x-2">
+                           <Button onClick={handleSaveNotes} size="sm" className="bg-stone-900 hover:bg-stone-800">Save Note</Button>
+                           <Button variant="outline" onClick={() => { setIsEditingNotes(false); setNotesDraft(dailyData.notes); }} size="sm">Cancel</Button>
+                         </div>
+                       </div>
+                    ) : (
+                       <div className="min-h-[60px] text-sm text-stone-600 whitespace-pre-wrap bg-stone-50 p-3 rounded-xl border border-stone-100">
+                          {dailyData.notes ? dailyData.notes : <span className="italic text-stone-400">No notes written for today. Click the edit icon to add some.</span>}
+                       </div>
+                    )}
+                 </CardContent>
+                 <CardFooter className="pt-0">
+                    <Button variant="secondary" className="w-full text-stone-600 shadow-none border border-stone-200 bg-white hover:bg-stone-50" onClick={() => window.print()}>
+                       <FileText className="h-4 w-4 mr-2" /> View Full Report
+                    </Button>
+                 </CardFooter>
+               </Card>
+
+            </div>
           </div>
+
         </div>
       </main>
     </div>

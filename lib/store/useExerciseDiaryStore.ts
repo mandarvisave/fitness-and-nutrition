@@ -9,12 +9,16 @@ export interface CardioExerciseLog {
   calories: number;
 }
 
+export interface StrengthSet {
+  id: string;
+  reps: number;
+  weight: number;
+}
+
 export interface StrengthExerciseLog {
   id: string;
   name: string;
-  sets: number;
-  reps: number;
-  weight: number;
+  trackingSets: StrengthSet[];
 }
 
 export interface DailyExerciseData {
