@@ -58,11 +58,8 @@ env/
 coverage/dataset/ 
 CulinaryDB/ 
 
-# Ignore skill files
-*.skill
-
-# Ignore TSV files
-*.tsv
-
-# Ignore PDF files
+node_modules/
+.env
 *.pdf
+*.tsv
+*.skill
